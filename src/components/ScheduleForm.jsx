@@ -1,12 +1,12 @@
 import { useRef, useState } from 'react'
 import { recognizeBestGrid, recognizeText } from '../lib/ocr.js'
-import { parseSchedule, parseScheduleColumns } from '../lib/parseSchedule.js'
+import { applyKnownNames, parseSchedule, parseScheduleColumns } from '../lib/parseSchedule.js'
 import { identityFromFilename, parseIdentity } from '../lib/parseIdentity.js'
 import { makeThumbnail, upscaleForOcr } from '../lib/image.js'
 
 const EMPTY = { nama: '', kelas: '', divisi: '' }
 
-export default function ScheduleForm({ onSubmit }) {
+export default function ScheduleForm({ onSubmit, people }) {
   const [form, setForm] = useState(EMPTY)
   const [file, setFile] = useState(null)
   const [preview, setPreview] = useState('')
@@ -85,7 +85,7 @@ export default function ScheduleForm({ onSubmit }) {
         parsed = parseSchedule(auto.text)
       }
       setRawText(text)
-      setCourses(parsed)
+      setCourses(applyKnownNames(parsed, people))
       setIdentitySource(autofillIdentity(text, file.name))
       setStatus(parsed.length ? `${parsed.length} mata kuliah terbaca` : 'tidak ada mata kuliah terbaca')
       if (!parsed.length) {

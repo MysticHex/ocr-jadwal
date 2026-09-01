@@ -6,7 +6,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
-import { parseSchedule, parseScheduleColumns } from './parseSchedule.js'
+import { applyKnownNames, parseSchedule, parseScheduleColumns } from './parseSchedule.js'
 
 const OCR_TEXT = fs.readFileSync(new URL('./__fixtures__/jadwal-sirama.txt', import.meta.url), 'utf8')
 
@@ -193,4 +193,68 @@ test('screenshot HP lewat upscale browser: hari, jam, dan nama tetap benar', () 
   )
   assert.equal(rows.find((r) => r.code === 'UCKXADB2').name, 'BAHASA INGGRIS')
   assert.equal(rows.find((r) => r.code === 'BBK3EAB3').name, 'PROYEK PERANGKAT LUNAK')
+})
+
+// --- nama dipilih dari beberapa sesi -------------------------------------------
+
+const sesi = (name, from, to) =>
+  `BBK3DAB3\n${name}\nENTERPRISE DATA MANAGEMENT\n${from} - ${to} WIB\n`
+
+test('nama diambil dari bacaan terbanyak antar sesi', () => {
+  const text =
+    sesi('MANGJEMEN DATA ENTERPRISE', '14:30', '15:30') +
+    sesi('MANAJEMEN DATA ENTERPRISE', '15:30', '16:30') +
+    sesi('MANAJEMEN DATA ENTERPRISE', '16:30', '17:30')
+  const [row] = parseSchedule(text)
+  assert.equal(row.sessions, 3)
+  assert.equal(row.name, 'MANAJEMEN DATA ENTERPRISE')
+})
+
+test('kalau semua sesi beda, yang paling berbentuk nama menang', () => {
+  // OCR gagal di dua sesi dan menyisakan huruf kecil; nama SIRAMA selalu kapital.
+  const text =
+    sesi('ari Lr DATA ENTERPRISE', '14:30', '15:30') +
+    sesi('ar EMEN DATA ENTERPRISE', '15:30', '16:30') +
+    sesi('MANAJEMEN DATA ENTERPRISE', '16:30', '17:30')
+  assert.equal(parseSchedule(text)[0].name, 'MANAJEMEN DATA ENTERPRISE')
+})
+
+test('satu sesi saja tetap dipakai apa adanya', () => {
+  assert.equal(parseSchedule(sesi('AGAMA ISLAM', '16:30', '17:30'))[0].name, 'AGAMA ISLAM')
+})
+
+test('nama mata kuliah pada screenshot HP tidak lagi membawa typo OCR', () => {
+  for (const fixture of ['jadwal-words-mobile.json', 'jadwal-words-mobile-browser.json']) {
+    const rows = parseScheduleColumns(load(fixture))
+    assert.equal(rows.find((r) => r.code === 'BBK3DAB3').name, 'MANAJEMEN DATA ENTERPRISE', fixture)
+  }
+})
+
+// --- nama dari mata kuliah yang sudah tersimpan --------------------------------
+
+const orang = (nama, courses) => ({ id: nama, nama, courses })
+
+test('nama dipakai ulang dari kode yang sama milik anggota lain', () => {
+  const tersimpan = [
+    orang('Alif', [
+      { code: 'BBK3DAB3', name: 'MANAJEMEN DATA ENTERPRISE', nameEn: 'ENTERPRISE DATA MANAGEMENT' },
+    ]),
+  ]
+  const [row] = applyKnownNames(
+    [{ code: 'BBK3DAB3', name: 'MANGJEMEN DATA ENTERPRISE', nameEn: '' }],
+    tersimpan,
+  )
+  assert.equal(row.name, 'MANAJEMEN DATA ENTERPRISE')
+  assert.equal(row.nameEn, 'ENTERPRISE DATA MANAGEMENT')
+})
+
+test('kode yang belum pernah tersimpan dibiarkan apa adanya', () => {
+  const rows = [{ code: 'XXK9ZZZ9', name: 'MATA KULIAH BARU', nameEn: '' }]
+  assert.deepEqual(applyKnownNames(rows, [orang('Alif', [{ code: 'BBK3DAB3', name: 'X' }])]), rows)
+})
+
+test('tanpa data tersimpan tidak ada yang berubah', () => {
+  const rows = [{ code: 'BBK3DAB3', name: 'MANGJEMEN DATA ENTERPRISE', nameEn: '' }]
+  assert.deepEqual(applyKnownNames(rows, []), rows)
+  assert.deepEqual(applyKnownNames(rows, undefined), rows)
 })

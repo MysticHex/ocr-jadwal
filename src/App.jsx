@@ -61,7 +61,10 @@ export default function App() {
 
       {page === 'data' ? (
         <>
-          <ScheduleForm onSubmit={(person) => setPeople((prev) => [...prev, person])} />
+          <ScheduleForm
+            people={people}
+            onSubmit={(person) => setPeople((prev) => [...prev, person])}
+          />
 
           <PeopleTable
             people={people}

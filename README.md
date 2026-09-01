@@ -68,7 +68,7 @@ src/
     WeekCalendar.jsx       heatmap mingguan + panel insight
   lib/
     ocr.js                 worker tesseract.js, dua pass + pilih confidence tertinggi
-    parseSchedule.js       parser teks OCR → daftar mata kuliah + kolom hari dari bbox
+    parseSchedule.js       parser teks OCR → daftar mata kuliah, kolom hari, koreksi nama
     parseIdentity.js       nama/NIM/kelas dari panel gambar, nama/divisi dari nama file
     weekLoad.js            agregasi jadwal semua anggota → grid mingguan + insight
     image.js               upscale + binarisasi Otsu, thumbnail dataURL
@@ -172,6 +172,24 @@ rusak tidak menutupi sinyal yang benar.
 Kode yang salah baca di satu sesi (`BZK4AAC4` jadi `BZK4AACA`, atau tersisip jadi
 `BBKA4GBB3`) digabung kembali kalau jarak editnya 1 dan hari serta namanya sama; kode yang
 dipakai diambil dari sesi terbanyak.
+
+## Memperbaiki salah baca nama
+
+Satu mata kuliah muncul di beberapa sesi, dan tiap sesi dibaca ulang oleh OCR. Dua lapis
+memanfaatkan pengulangan itu:
+
+1. **Antar sesi dalam satu gambar** — bacaan terbanyak yang dipakai. Kalau semua sesi
+   berbeda, yang paling berbentuk nama menang (nama SIRAMA selalu huruf kapital, jadi sisa
+   huruf kecil menandakan OCR gagal: `ari Lr DATA ENTERPRISE` kalah dari
+   `MANAJEMEN DATA ENTERPRISE`), lalu yang paling dekat ke bacaan lain.
+2. **Antar anggota** — `applyKnownNames` memakai ulang nama yang sudah tersimpan untuk kode
+   yang sama. Satu angkatan mengambil banyak mata kuliah yang sama dan OCR gagal di tempat
+   berbeda-beda: satu screenshot membaca `MANGJEMEN DATA ENTERPRISE` sementara screenshot
+   lain membaca kode itu dengan benar. Sekaligus membuat penamaan konsisten antar anggota.
+
+Yang tidak dipakai: membandingkan nama antara dua pass OCR. Sudah dicoba dan tidak
+memperbaiki apa pun pada korpus uji, sementara pencocokan kode antar pass justru sempat
+menukar nama dua mata kuliah yang cuma beda satu huruf (`BBK3CAB3` dan `BBK3FAB3`).
 
 ## Test
 

@@ -89,6 +89,52 @@ function extractBlocks(text) {
   return blocks.filter((b) => b.code || b.titles.length)
 }
 
+function levenshtein(a, b) {
+  let prev = Array.from({ length: b.length + 1 }, (_, i) => i)
+  for (let i = 1; i <= a.length; i += 1) {
+    const row = [i]
+    for (let j = 1; j <= b.length; j += 1) {
+      row[j] = Math.min(prev[j] + 1, row[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1))
+    }
+    prev = row
+  }
+  return prev[b.length]
+}
+
+/**
+ * Satu mata kuliah muncul di beberapa sesi, dan tiap sesi dibaca ulang oleh
+ * OCR. Salah baca biasanya cuma kena satu sesi ("MANAJEMEN" jadi "MANGJEMEN"),
+ * jadi bacaan terbanyak dipakai.
+ *
+ * Kalau semua bacaan berbeda, yang paling berbentuk nama mata kuliah menang:
+ * nama di SIRAMA selalu huruf kapital, jadi sisa huruf kecil menandakan OCR
+ * gagal ("ari Lr DATA ENTERPRISE" kalah dari "MANAJEMEN DATA ENTERPRISE").
+ * Jarak edit total jadi penentu terakhir.
+ */
+function shapeScore(text) {
+  const upper = text.replace(/[^A-Z0-9 ]/g, '').length
+  return text.length ? upper / text.length : 0
+}
+
+function consensus(candidates) {
+  const options = candidates.filter(Boolean)
+  if (options.length <= 1) return options[0] || ''
+
+  const count = new Map()
+  for (const option of options) count.set(option, (count.get(option) || 0) + 1)
+
+  // Diurutkan: suara terbanyak, lalu paling berbentuk nama, lalu paling dekat
+  // ke bacaan lain.
+  const ranked = [...count].map(([option, votes]) => ({
+    option,
+    votes,
+    shape: shapeScore(option),
+    distance: options.reduce((sum, other) => sum + levenshtein(option, other), 0),
+  }))
+  ranked.sort((a, b) => b.votes - a.votes || b.shape - a.shape || a.distance - b.distance)
+  return ranked[0].option
+}
+
 /**
  * Ubah teks OCR jadi daftar mata kuliah unik.
  * Sesi berurutan dengan kode sama digabung jadi satu rentang waktu.
@@ -109,8 +155,8 @@ export function parseSchedule(text) {
     if (!existing) {
       byKey.set(key, {
         code: block.code || '(tanpa kode)',
-        name,
-        nameEn,
+        names: [name],
+        namesEn: [nameEn],
         day: block.day,
         start: block.start,
         end: block.end,
@@ -120,8 +166,8 @@ export function parseSchedule(text) {
     }
 
     existing.sessions += 1
-    if (!existing.name && name) existing.name = name
-    if (!existing.nameEn && nameEn) existing.nameEn = nameEn
+    existing.names.push(name)
+    existing.namesEn.push(nameEn)
     if (block.start != null && (existing.start == null || block.start < existing.start)) {
       existing.start = block.start
     }
@@ -132,8 +178,10 @@ export function parseSchedule(text) {
 
   return [...byKey.values()]
     .sort((a, b) => (a.start ?? 0) - (b.start ?? 0))
-    .map((c) => ({
+    .map(({ names, namesEn, ...c }) => ({
       ...c,
+      name: consensus(names),
+      nameEn: consensus(namesEn),
       start: c.start == null ? '' : fromMinutes(c.start),
       end: c.end == null ? '' : fromMinutes(c.end),
     }))
@@ -354,9 +402,42 @@ export function parseScheduleColumns(words) {
   }
 
   const courses = []
-  for (const [day, lines] of byDay)
-    for (const course of parseSchedule(unwrapTitles(lines).join('\n')))
+  for (const [day, lines] of byDay) {
+    for (const course of parseSchedule(unwrapTitles(lines).join('\n'))) {
       courses.push({ ...course, day })
+    }
+  }
 
   return mergeMisreadCodes(courses).sort((a, b) => a.start.localeCompare(b.start))
+}
+
+/**
+ * Pakai nama yang sudah tersimpan untuk kode mata kuliah yang sama.
+ *
+ * Anggota satu angkatan mengambil banyak mata kuliah yang sama, dan OCR salah
+ * baca di gambar yang berbeda-beda: satu screenshot membaca "MANGJEMEN DATA
+ * ENTERPRISE" sementara screenshot lain membaca kode yang sama dengan benar.
+ * Nama yang sudah pernah terbaca dipakai ulang, sekaligus membuat penamaan
+ * konsisten antar anggota.
+ *
+ * Hanya menimpa kalau kodenya sama persis dan namanya memang berbeda; kode di
+ * SIRAMA sudah unik per mata kuliah, jadi tidak perlu ikut mencocokkan hari.
+ *
+ * @param {ReturnType<typeof parseScheduleColumns>} courses hasil baca sekarang
+ * @param {Array<{courses?: Array<{code:string,name:string,nameEn:string}>}>} people yang sudah tersimpan
+ */
+export function applyKnownNames(courses, people) {
+  const known = new Map()
+  for (const person of people || []) {
+    for (const course of person.courses || []) {
+      if (course.code && course.name && !known.has(course.code)) known.set(course.code, course)
+    }
+  }
+  if (!known.size) return courses
+
+  return courses.map((course) => {
+    const seen = known.get(course.code)
+    if (!seen || seen.name === course.name) return course
+    return { ...course, name: seen.name, nameEn: seen.nameEn || course.nameEn }
+  })
 }
