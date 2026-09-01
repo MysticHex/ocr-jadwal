@@ -148,6 +148,7 @@ th { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: v
 .detail-table tbody tr:nth-child(odd) { background: var(--green); }
 .detail-table em { display: block; color: var(--muted); font-size: 11px; font-style: italic; }
 
+.raw { border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; }
 .raw summary { color: var(--muted); font-size: 13px; cursor: pointer; }
 .raw textarea {
   width: 100%;
