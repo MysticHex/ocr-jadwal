@@ -154,13 +154,24 @@ Diverifikasi lewat UI, bukan cuma unit test:
 | --- | --- |
 | crop tabel desktop (1652×932, 1521×841, 1498×814) | kode, hari, dan jam benar |
 | jendela browser penuh + sidebar (1920×1080) | kode, hari, dan jam benar |
-| screenshot HP portrait (1260×2800) | kode, hari, dan jam benar; sebagian nama mata kuliah tidak lengkap karena teksnya ~9px |
+| screenshot HP portrait (1260×2800) | kode, hari, jam, dan nama benar |
 
-Nama mata kuliah yang pecah beberapa baris di sel sempit digabung lagi berdasarkan tinggi
-kata — nama Inggris dirender lebih kecil, dan potongannya diambil pada penurunan tinggi
-terbesar, bukan ambang tetap. Kode yang salah baca di satu sesi (`BZK4AAC4` jadi `BZK4AACA`,
-atau tersisip jadi `BBKA4GBB3`) digabung kembali kalau jarak editnya 1 dan hari serta namanya
-sama; kode yang dipakai diambil dari sesi terbanyak.
+Nama mata kuliah yang pecah beberapa baris di sel sempit digabung lagi. Batas antara nama
+Indonesia dan nama Inggris ditentukan dari perubahan ukuran teks terbesar antar baris, dan
+ukurannya dibaca dari **dua** sumber sekaligus:
+
+- `font_size`, taksiran Tesseract sendiri
+- tinggi bbox terkecil pada baris itu
+
+Keduanya punya titik buta masing-masing — bbox melar kalau ada glyph turun atau noise (satu
+kata pernah terbaca 44px di baris 19px), sedangkan taksiran font kadang meleset pada baris
+pendek. Pada korpus uji tidak ada yang benar sendirian di semua gambar; jumlah perubahan
+relatif keduanya benar di semuanya, dengan sumbangan tinggi bbox dibatasi supaya satu kotak
+rusak tidak menutupi sinyal yang benar.
+
+Kode yang salah baca di satu sesi (`BZK4AAC4` jadi `BZK4AACA`, atau tersisip jadi
+`BBKA4GBB3`) digabung kembali kalau jarak editnya 1 dan hari serta namanya sama; kode yang
+dipakai diambil dari sesi terbanyak.
 
 ## Test
 

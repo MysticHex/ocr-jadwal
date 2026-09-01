@@ -24,7 +24,10 @@ function flattenWords(data) {
       for (const line of para.lines || [])
         for (const word of line.words || []) {
           const text = word.text.trim()
-          if (text) words.push({ text, ...word.bbox })
+          // `font_size` adalah taksiran Tesseract sendiri dan jauh lebih stabil
+          // dari tinggi bbox, yang ikut melar kalau ada glyph turun atau noise.
+          // Dipakai untuk memisahkan nama Indonesia dari nama Inggris.
+          if (text) words.push({ text, ...word.bbox, size: word.font_size })
         }
   return words
 }

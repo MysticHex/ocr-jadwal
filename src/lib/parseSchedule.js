@@ -172,7 +172,11 @@ function findDayHeaders(words) {
 function toCells(words, lineHeight) {
   const rows = []
   for (const word of [...words].sort((a, b) => a.y0 - b.y0 || a.x0 - b.x0)) {
-    const cy = (word.y0 + word.y1) / 2
+    // Tinggi dibatasi sebelum menghitung titik tengah: sesekali OCR memberi satu
+    // kata bbox yang jauh terlalu tinggi (pernah 52px di tengah baris 22px), dan
+    // titik tengahnya ikut melompat sehingga kata itu terlempar ke baris sendiri
+    // — urutan kata pada nama mata kuliah jadi terbalik.
+    const cy = word.y0 + Math.min(word.y1 - word.y0, lineHeight * 1.5) / 2
     const row = rows.find((r) => Math.abs(r.y - cy) < lineHeight * 0.6)
     if (row) {
       // Pusat baris di-rata-rata ulang: tanpa ini baris yang kebetulan diawali
@@ -201,11 +205,31 @@ function toCells(words, lineHeight) {
   return cells
 }
 
+// Taksiran ukuran font Tesseract untuk satu baris; jatuh ke tinggi bbox kalau
+// taksiran itu tidak ada.
+function lineSize(words) {
+  const sizes = words.map((w) => w.size).filter((s) => s > 0)
+  return sizes.length ? median(sizes) : Math.min(...words.map((w) => w.y1 - w.y0))
+}
+
+// Seberapa besar ukuran teks berubah antar dua baris. Dua ukuran dipakai
+// bersama karena masing-masing punya titik butanya sendiri: tinggi bbox melar
+// kalau ada glyph turun atau noise (satu kata pernah terbaca 44px di baris
+// 19px), sedangkan taksiran `font_size` Tesseract kadang meleset pada baris
+// pendek. Pada korpus uji, tidak ada satu pun yang benar sendirian di semua
+// gambar, tapi jumlah perubahan relatif keduanya benar di semuanya.
+// Sumbangan tinggi bbox dibatasi: satu kotak yang melar bisa memberi selisih
+// >100% dan menutupi sinyal ukuran font yang sebenarnya benar.
+function sizeChange(a, b) {
+  const bySize = Math.abs(a.size - b.size) / a.size
+  const byHeight = Math.abs(a.height - b.height) / a.height
+  return bySize + Math.min(byHeight, 0.15)
+}
+
 // Pada sel sempit (screenshot HP) satu nama mata kuliah pecah jadi beberapa
 // baris, sehingga `extractBlocks` mengira baris kedua adalah nama Inggris.
-// Nama Inggris di SIRAMA dirender lebih kecil, jadi tinggi kata memisahkannya:
-// blok Indonesia dan blok Inggris dipotong pada celah tinggi terbesar, bukan
-// ambang tetap — pada gambar desktop bedanya cuma 17px vs 15px.
+// Nama Indonesia dan nama Inggris dirender dengan ukuran font berbeda, jadi
+// batasnya ada di perubahan ukuran terbesar antar baris.
 function unwrapTitles(lines) {
   const out = []
   let run = []
@@ -213,15 +237,19 @@ function unwrapTitles(lines) {
   const flush = () => {
     if (run.length >= 3) {
       // Nama Indonesia selalu di atas nama Inggris, jadi potongannya posisional:
-      // ambil batas dengan penurunan tinggi terbesar. Mengelompokkan berdasarkan
-      // tinggi saja salah, karena tinggi bbox ikut bergantung pada glyph baris
-      // itu ("PROYEK" lebih pendek dari "PERANGKAT LUNAK" pada font yang sama).
+      // batas = perubahan ukuran terbesar antar baris berurutan. Selisihnya
+      // diambil mutlak karena arahnya tidak selalu sama — pada taksiran
+      // font_size Tesseract, blok Inggris justru terbaca lebih besar.
+      //
+      // Perubahan harus berarti (>8%). Nama yang wrap tiga baris tanpa nama
+      // Inggris sama sekali cuma bergoyang 1 satuan antar barisnya; tanpa syarat
+      // ini nama itu ikut terbelah dua.
       let cut = 0
-      let steepest = 0
+      let widest = 0.16
       for (let i = 1; i < run.length; i += 1) {
-        const drop = run[i - 1].height - run[i].height
-        if (drop > steepest) {
-          steepest = drop
+        const change = sizeChange(run[i - 1], run[i])
+        if (change > widest) {
+          widest = change
           cut = i
         }
       }
@@ -318,7 +346,10 @@ export function parseScheduleColumns(words) {
     if (!byDay.has(nearest.day)) byDay.set(nearest.day, [])
     byDay.get(nearest.day).push({
       text: cell.words.map((w) => w.text).join(' '),
-      height: median(cell.words.map((w) => w.y1 - w.y0)),
+      size: lineSize(cell.words),
+      // Kata terpendek, bukan median: glyph yang turun di bawah baris ("J" pada
+      // PROJECT) membuat bbox kata itu lebih tinggi walau fontnya sama ukuran.
+      height: Math.min(...cell.words.map((w) => w.y1 - w.y0)),
     })
   }
 

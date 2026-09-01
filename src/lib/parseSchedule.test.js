@@ -122,11 +122,30 @@ test('screenshot HP: tujuh mata kuliah, hari dan jam benar', () => {
   )
 })
 
-test('nama mata kuliah yang wrap digabung, bukan dipotong jadi nama Inggris', () => {
+test('semua nama mata kuliah pada screenshot HP terbaca utuh', () => {
   const rows = parseScheduleColumns(load('jadwal-words-mobile.json'))
-  const dw = rows.find((r) => r.code === 'BBK3BAB3')
-  assert.equal(dw.name, 'DATA WAREHOUSE DAN BUSINESS INTELLIGENCE')
-  assert.equal(dw.nameEn, 'DATA WAREHOUSE AND BUSINESS INTELLIGENCE')
+  assert.deepEqual(
+    rows.map((r) => `${r.name} / ${r.nameEn}`),
+    [
+      'DATA WAREHOUSE DAN BUSINESS INTELLIGENCE / DATA WAREHOUSE AND BUSINESS INTELLIGENCE',
+      'PROYEK PERANGKAT LUNAK / SOFTWARE PROJECT',
+      'SISTEM INFORMASI AKUNTANSI / ACCOUNTING INFORMATION SYSTEMS',
+      'ARSITEKTUR ENTERPRISE / ENTERPRISE ARCHITECTURE',
+      'BAHASA INGGRIS / ENGLISH',
+      'MANAJEMEN DATA ENTERPRISE / ENTERPRISE DATA MANAGEMENT',
+      'KOMPUTASI AWAN / CLOUD COMPUTING',
+    ],
+  )
+})
+
+test('bbox satu kata yang melar tidak membalik urutan kata sebarisnya', () => {
+  // "MANAJEMEN" pada fixture HP punya tinggi 52px di tengah baris 22px. Tanpa
+  // pembatasan tinggi, titik tengahnya melompat dan kata itu pindah baris.
+  const words = load('jadwal-words-mobile.json')
+  const swollen = words.find((w) => w.text === 'MANAJEMEN' && w.y1 - w.y0 > 40)
+  assert.ok(swollen, 'fixture harus memuat bbox melar yang jadi alasan pembatasan itu')
+  const row = parseScheduleColumns(words).find((r) => r.code === 'BBK3DAB3')
+  assert.equal(row.name, 'MANAJEMEN DATA ENTERPRISE')
 })
 
 test('nama dua baris pada gambar desktop tidak ikut digabung', () => {
@@ -148,4 +167,30 @@ test('kode yang salah baca di satu sesi digabung, huruf tertukar maupun tersisip
     if (w.text === 'BBK3CAB3' && inserted++ === 0) w.text = 'BBK3CAAB3'
   }
   assert.equal(parseScheduleColumns(typo).length, rows.length, 'jumlah baris tidak boleh bertambah')
+})
+
+// Screenshot HP yang sama, tapi kata-katanya dari gambar hasil upscale canvas
+// browser — persis jalur aplikasi. Sel yang di sini gagal berbeda dari yang
+// gagal pada upscale di luar browser, jadi keduanya perlu ikut diuji.
+test('screenshot HP lewat upscale browser: hari, jam, dan nama tetap benar', () => {
+  const rows = parseScheduleColumns(load('jadwal-words-mobile-browser.json'))
+  assert.deepEqual(
+    rows.map((r) => `${r.code} ${r.day} ${r.start}-${r.end}`),
+    [
+      'BBK3BAB3 SELASA 06:30-09:30',
+      'BBK3EAB3 RABU 06:30-09:30',
+      'BBK3FAB3 SABTU 07:30-10:30',
+      'BBK3AAB3 SABTU 12:30-14:30',
+      'UCKXADB2 KAMIS 12:30-14:30',
+      'BBK3DAB3 SENIN 14:30-17:30',
+      'BBK3CAB3 SABTU 15:30-18:30',
+    ],
+  )
+  // Nama yang wrap tidak boleh terpotong separuh lagi.
+  assert.equal(
+    rows.find((r) => r.code === 'BBK3BAB3').name,
+    'DATA WAREHOUSE DAN BUSINESS INTELLIGENCE',
+  )
+  assert.equal(rows.find((r) => r.code === 'UCKXADB2').name, 'BAHASA INGGRIS')
+  assert.equal(rows.find((r) => r.code === 'BBK3EAB3').name, 'PROYEK PERANGKAT LUNAK')
 })
