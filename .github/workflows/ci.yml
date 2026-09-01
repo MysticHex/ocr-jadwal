@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+
+# Push cepat beruntun: batalkan run lama di ref yang sama.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Test & build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      # `npm ci` gagal kalau package-lock.json tidak sinkron dengan package.json.
+      # Itu justru yang kita mau: lockfile basi ketahuan di sini, bukan saat deploy.
+      - run: npm ci
+
+      - name: Unit test
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      # Bukti bahwa build benar-benar menghasilkan bundle, bukan folder kosong.
+      - name: Cek hasil build
+        run: |
+          test -f dist/index.html
+          ls -R dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist
+          retention-days: 7

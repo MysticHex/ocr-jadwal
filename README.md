@@ -24,6 +24,26 @@ npm run build    # output ke dist/
 npm run preview
 ```
 
+## CI / CD
+
+`.github/workflows/ci.yml` — tiap push dan pull request: `npm ci`, `npm test`, `npm run build`,
+lalu cek `dist/index.html` benar-benar ada dan unggah `dist` sebagai artifact (simpan 7 hari).
+`npm ci` sengaja dipakai, bukan `npm install`, supaya `package-lock.json` yang basi ketahuan
+di CI, bukan pas deploy.
+
+`.github/workflows/deploy.yml` — deploy produksi lewat Vercel CLI. **Mati sendiri kalau secret
+`VERCEL_TOKEN` belum diset.** Itu default yang diinginkan: kalau Vercel Git integration sudah
+tersambung ke repo ini, Vercel sudah men-deploy tiap push dan job ini cuma bikin deploy dobel.
+
+Aktifkan hanya kalau integrasi Git Vercel tidak dipakai — isi 3 secret di
+*Settings → Secrets and variables → Actions*:
+
+| Secret | Isi |
+| --- | --- |
+| `VERCEL_TOKEN` | buat di vercel.com/account/tokens |
+| `VERCEL_ORG_ID` | field `orgId` di `.vercel/project.json` |
+| `VERCEL_PROJECT_ID` | field `projectId` di `.vercel/project.json` |
+
 ## Deploy ke Vercel
 
 1. Push repo ini ke GitHub.
@@ -103,7 +123,7 @@ sebenarnya dibaca Tesseract.
 ## Test
 
 ```bash
-node --test src/lib/*.test.js
+npm test
 ```
 
 `parseSchedule.test.js` memakai fixture OCR nyata di `src/lib/__fixtures__/`.

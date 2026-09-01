@@ -1,0 +1,78 @@
+name: Deploy
+
+# CD lewat Vercel CLI. Job ini SENGAJA mati sendiri kalau secret VERCEL_TOKEN
+# belum diset, karena kalau Vercel Git integration sudah tersambung ke repo ini
+# Vercel sudah men-deploy tiap push — menambah job ini bikin deploy dobel.
+#
+# Aktifkan hanya kalau integrasi Git Vercel TIDAK dipakai. Butuh 3 secret
+# (Settings -> Secrets and variables -> Actions):
+#   VERCEL_TOKEN       vercel.com/account/tokens
+#   VERCEL_ORG_ID      isi "orgId" di .vercel/project.json
+#   VERCEL_PROJECT_ID  isi "projectId" di .vercel/project.json
+
+on:
+  push:
+    branches: [claude/ocr-react-vercel-project-192c4s]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Vercel production
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: production
+      url: ${{ steps.deploy.outputs.url }}
+
+    steps:
+      # Secret tidak bisa dipakai di `if` level job, jadi gerbangnya dibuat di step.
+      - name: Cek secret
+        id: guard
+        env:
+          TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          if [ -z "$TOKEN" ]; then
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::VERCEL_TOKEN belum diset - deploy dilewati. Kalau Vercel Git integration aktif, ini memang yang diinginkan."
+          else
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - if: steps.guard.outputs.enabled == 'true'
+        uses: actions/checkout@v4
+
+      - if: steps.guard.outputs.enabled == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - if: steps.guard.outputs.enabled == 'true'
+        run: npm ci
+
+      # Deploy hanya kalau test lulus — jangan pernah kirim build rusak ke produksi.
+      - name: Unit test
+        if: steps.guard.outputs.enabled == 'true'
+        run: npm test
+
+      - name: Install Vercel CLI
+        if: steps.guard.outputs.enabled == 'true'
+        run: npm install --global vercel@latest
+
+      - name: Deploy
+        id: deploy
+        if: steps.guard.outputs.enabled == 'true'
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
+          vercel build --prod --token="$VERCEL_TOKEN"
+          url=$(vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN")
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "Deployed: $url" >> "$GITHUB_STEP_SUMMARY"
