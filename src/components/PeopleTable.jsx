@@ -6,7 +6,8 @@ function DetailCard({ person }) {
       <div className="detail-head">
         <strong>{person.nama}</strong>
         <span>
-          {[person.kelas, person.divisi].filter(Boolean).join(' · ') || 'tanpa kelas/divisi'}
+          {[person.nim, person.kelas, person.divisi].filter(Boolean).join(' · ') ||
+            'tanpa kelas/divisi'}
         </span>
       </div>
       {person.thumb && <img className="detail-thumb" src={person.thumb} alt={`Jadwal ${person.nama}`} />}

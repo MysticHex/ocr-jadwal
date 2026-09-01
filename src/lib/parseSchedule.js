@@ -201,6 +201,99 @@ function toCells(words, lineHeight) {
   return cells
 }
 
+// Pada sel sempit (screenshot HP) satu nama mata kuliah pecah jadi beberapa
+// baris, sehingga `extractBlocks` mengira baris kedua adalah nama Inggris.
+// Nama Inggris di SIRAMA dirender lebih kecil, jadi tinggi kata memisahkannya:
+// blok Indonesia dan blok Inggris dipotong pada celah tinggi terbesar, bukan
+// ambang tetap — pada gambar desktop bedanya cuma 17px vs 15px.
+function unwrapTitles(lines) {
+  const out = []
+  let run = []
+
+  const flush = () => {
+    if (run.length >= 3) {
+      // Nama Indonesia selalu di atas nama Inggris, jadi potongannya posisional:
+      // ambil batas dengan penurunan tinggi terbesar. Mengelompokkan berdasarkan
+      // tinggi saja salah, karena tinggi bbox ikut bergantung pada glyph baris
+      // itu ("PROYEK" lebih pendek dari "PERANGKAT LUNAK" pada font yang sama).
+      let cut = 0
+      let steepest = 0
+      for (let i = 1; i < run.length; i += 1) {
+        const drop = run[i - 1].height - run[i].height
+        if (drop > steepest) {
+          steepest = drop
+          cut = i
+        }
+      }
+      if (cut > 0) {
+        out.push(
+          run.slice(0, cut).map((l) => l.text).join(' '),
+          run.slice(cut).map((l) => l.text).join(' '),
+        )
+        run = []
+        return
+      }
+    }
+    for (const line of run) out.push(line.text)
+    run = []
+  }
+
+  for (const line of lines) {
+    if (CODE_RE.test(line.text.toUpperCase()) || TIME_RE.test(line.text)) {
+      flush()
+      out.push(line.text)
+    } else {
+      run.push(line)
+    }
+  }
+  flush()
+  return out
+}
+
+// OCR sesekali salah membaca kode di salah satu sesi, sehingga satu mata kuliah
+// pecah jadi dua baris. Bentuknya bisa huruf tertukar ("BZK4AAC4" -> "BZK4AACA")
+// atau karakter tersisip ("BBK4GBB3" -> "BBKA4GBB3"), jadi yang dipakai jarak
+// edit, bukan sekadar beda posisi.
+function withinOneEdit(a, b) {
+  if (Math.abs(a.length - b.length) > 1) return false
+  const [short, long] = a.length <= b.length ? [a, b] : [b, a]
+
+  let i = 0
+  let j = 0
+  let edits = 0
+  while (i < short.length && j < long.length) {
+    if (short[i] === long[j]) {
+      i += 1
+      j += 1
+      continue
+    }
+    if ((edits += 1) > 1) return false
+    if (short.length === long.length) i += 1
+    j += 1
+  }
+  return edits + (long.length - j) === 1
+}
+
+function mergeMisreadCodes(courses) {
+  const kept = []
+  for (const course of courses) {
+    const twin = kept.find(
+      (k) => k.day === course.day && k.name === course.name && withinOneEdit(k.code, course.code),
+    )
+    if (!twin) {
+      kept.push(course)
+      continue
+    }
+    // Kode yang dipakai diambil dari sesi terbanyak: salah baca biasanya cuma
+    // terjadi di satu sesi, sedangkan sisanya membaca kode yang benar.
+    if (course.sessions > twin.sessions) twin.code = course.code
+    twin.sessions += course.sessions
+    if (course.start && (!twin.start || course.start < twin.start)) twin.start = course.start
+    if (course.end && (!twin.end || course.end > twin.end)) twin.end = course.end
+  }
+  return kept
+}
+
 /**
  * Susun ulang kata jadi teks per kolom hari, lalu parse tiap kolom terpisah.
  * Mengembalikan array kosong kalau header hari tidak ketemu (mis. gambar sudah
@@ -223,12 +316,16 @@ export function parseScheduleColumns(words) {
     const cx = centerX(cell)
     const nearest = headers.reduce((best, h) => (Math.abs(h.cx - cx) < Math.abs(best.cx - cx) ? h : best))
     if (!byDay.has(nearest.day)) byDay.set(nearest.day, [])
-    byDay.get(nearest.day).push(cell.words.map((w) => w.text).join(' '))
+    byDay.get(nearest.day).push({
+      text: cell.words.map((w) => w.text).join(' '),
+      height: median(cell.words.map((w) => w.y1 - w.y0)),
+    })
   }
 
   const courses = []
   for (const [day, lines] of byDay)
-    for (const course of parseSchedule(lines.join('\n'))) courses.push({ ...course, day })
+    for (const course of parseSchedule(unwrapTitles(lines).join('\n')))
+      courses.push({ ...course, day })
 
-  return courses.sort((a, b) => a.start.localeCompare(b.start))
+  return mergeMisreadCodes(courses).sort((a, b) => a.start.localeCompare(b.start))
 }

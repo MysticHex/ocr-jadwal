@@ -83,3 +83,69 @@ test('tanpa header hari kembalikan kosong supaya pemanggil fallback', () => {
   const noHeaders = WORDS.filter((w) => !/^(SENIN|SELASA|RABU|KAMIS|JUM'AT|SABTU|MINGGU)$/.test(w.text))
   assert.deepEqual(parseScheduleColumns(noHeaders), [])
 })
+
+// --- korpus Dataset ------------------------------------------------------------
+// Dua bentuk screenshot yang paling berbeda dari gambar acuan: crop tabel dengan
+// sel berwarna (butuh binarisasi Otsu, tanpa itu nol mata kuliah terbaca) dan
+// screenshot HP portrait yang nama mata kuliahnya wrap beberapa baris.
+// Identitas pada fixture HP sudah diganti "REDACTED".
+
+test('crop tabel desktop: tujuh mata kuliah, hari dan jam benar', () => {
+  const rows = parseScheduleColumns(load('jadwal-words-crop.json'))
+  assert.deepEqual(
+    rows.map((r) => `${r.code} ${r.day} ${r.start}-${r.end} x${r.sessions}`),
+    [
+      'BBK3DAB3 SELASA 07:30-10:30 x3',
+      'BBK3BAB3 KAMIS 07:30-10:30 x3',
+      'UCKXADB2 SENIN 08:30-10:30 x2',
+      'BBK3AAB3 RABU 09:30-12:30 x3',
+      'BBK3FAB3 SELASA 12:30-15:30 x3',
+      'BBK3CAB3 KAMIS 13:30-16:30 x3',
+      'BBK3EAB3 SENIN 13:30-16:30 x3',
+    ],
+  )
+})
+
+test('screenshot HP: tujuh mata kuliah, hari dan jam benar', () => {
+  const rows = parseScheduleColumns(load('jadwal-words-mobile.json'))
+  assert.deepEqual(
+    rows.map((r) => `${r.code} ${r.day} ${r.start}-${r.end} x${r.sessions}`),
+    [
+      'BBK3BAB3 SELASA 06:30-09:30 x3',
+      'BBK3EAB3 RABU 06:30-09:30 x3',
+      'BBK3FAB3 SABTU 07:30-10:30 x3',
+      'BBK3AAB3 SABTU 11:30-14:30 x3',
+      'UCKXADB2 KAMIS 12:30-14:30 x2',
+      'BBK3DAB3 SENIN 14:30-17:30 x3',
+      'BBK3CAB3 SABTU 15:30-18:30 x3',
+    ],
+  )
+})
+
+test('nama mata kuliah yang wrap digabung, bukan dipotong jadi nama Inggris', () => {
+  const rows = parseScheduleColumns(load('jadwal-words-mobile.json'))
+  const dw = rows.find((r) => r.code === 'BBK3BAB3')
+  assert.equal(dw.name, 'DATA WAREHOUSE DAN BUSINESS INTELLIGENCE')
+  assert.equal(dw.nameEn, 'DATA WAREHOUSE AND BUSINESS INTELLIGENCE')
+})
+
+test('nama dua baris pada gambar desktop tidak ikut digabung', () => {
+  const rows = parseScheduleColumns(load('jadwal-words-browser.json'))
+  const bd = rows.find((r) => r.code === 'BBK4GBB3')
+  assert.equal(bd.name, 'PENGELOLAAN BIG DATA')
+  assert.equal(bd.nameEn, 'BIG DATA MANAGEMENT')
+})
+
+test('kode yang salah baca di satu sesi digabung, huruf tertukar maupun tersisip', () => {
+  const words = load('jadwal-words-crop.json')
+  const rows = parseScheduleColumns(words)
+  const typo = JSON.parse(JSON.stringify(words))
+  // rusak satu kemunculan kode: satu huruf tertukar, satu karakter tersisip
+  let swapped = 0
+  let inserted = 0
+  for (const w of typo) {
+    if (w.text === 'BBK3EAB3' && swapped++ === 0) w.text = 'BBK3EAB8'
+    if (w.text === 'BBK3CAB3' && inserted++ === 0) w.text = 'BBK3CAAB3'
+  }
+  assert.equal(parseScheduleColumns(typo).length, rows.length, 'jumlah baris tidak boleh bertambah')
+})

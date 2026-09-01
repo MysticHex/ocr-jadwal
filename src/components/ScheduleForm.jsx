@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
-import { recognizeGrid, recognizeText } from '../lib/ocr.js'
+import { recognizeBestGrid, recognizeText } from '../lib/ocr.js'
 import { parseSchedule, parseScheduleColumns } from '../lib/parseSchedule.js'
+import { identityFromFilename, parseIdentity } from '../lib/parseIdentity.js'
 import { makeThumbnail, upscaleForOcr } from '../lib/image.js'
 
 const EMPTY = { nama: '', kelas: '', divisi: '' }
@@ -15,7 +16,40 @@ export default function ScheduleForm({ onSubmit }) {
   const [progress, setProgress] = useState(0)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [identitySource, setIdentitySource] = useState('')
+  const [nim, setNim] = useState('')
   const fileRef = useRef(null)
+
+  // Isi kolom identitas yang masih kosong. Panel "Data Mahasiswa" (tampilan
+  // mobile SIRAMA) memberi nama/NIM/kelas; nama file memberi nama dan divisi.
+  // Ketikan user tidak pernah ditimpa.
+  function autofillIdentity(text, filename) {
+    const fromImage = parseIdentity(text)
+    const fromName = identityFromFilename(filename)
+    const sources = []
+
+    // Dihitung dari state saat ini, bukan di dalam updater setForm: updater
+    // dijalankan React belakangan, jadi `sources` masih kosong saat dibaca.
+    const next = { ...form }
+    if (!next.nama.trim() && (fromImage.nama || fromName.nama)) {
+      next.nama = fromImage.nama || fromName.nama
+      sources.push(fromImage.nama ? 'gambar' : 'nama file')
+    }
+    if (!next.kelas.trim() && fromImage.kelas) {
+      next.kelas = fromImage.kelas
+      sources.push('gambar')
+    }
+    if (!next.divisi.trim() && fromName.divisi) {
+      next.divisi = fromName.divisi
+      sources.push('nama file')
+    }
+
+    setNim(fromImage.nim)
+    setForm(next)
+
+    if (!sources.length) return ''
+    return `Identitas terisi otomatis dari ${[...new Set(sources)].join(' dan ')} — periksa dulu sebelum simpan.`
+  }
 
   function pickFile(nextFile) {
     if (!nextFile) return
@@ -40,19 +74,19 @@ export default function ScheduleForm({ onSubmit }) {
         setStatus(m.status)
         setProgress(m.progress || 0)
       }
-      const image = await upscaleForOcr(file)
-      const grid = await recognizeGrid(image, onLog)
+      const grid = await recognizeBestGrid(file, onLog)
       let text = grid.text
       let parsed = parseScheduleColumns(grid.words)
       if (!parsed.length) {
         // Tidak ada baris header hari (gambar sudah di-crop): baca ulang dengan
         // deteksi tata letak otomatis, kolom hari diisi manual.
-        const auto = await recognizeText(image, onLog)
+        const auto = await recognizeText(await upscaleForOcr(file), onLog)
         text = auto.text
         parsed = parseSchedule(auto.text)
       }
       setRawText(text)
       setCourses(parsed)
+      setIdentitySource(autofillIdentity(text, file.name))
       setStatus(parsed.length ? `${parsed.length} mata kuliah terbaca` : 'tidak ada mata kuliah terbaca')
       if (!parsed.length) {
         setError('OCR selesai tapi tidak menemukan pola jadwal. Coba gambar beresolusi lebih tinggi.')
@@ -89,6 +123,7 @@ export default function ScheduleForm({ onSubmit }) {
       nama: form.nama.trim(),
       kelas: form.kelas.trim(),
       divisi: form.divisi.trim(),
+      nim,
       courses,
       thumb,
       rawText,
@@ -100,6 +135,8 @@ export default function ScheduleForm({ onSubmit }) {
     setRawText('')
     setStatus('')
     setError('')
+    setIdentitySource('')
+    setNim('')
     if (preview) URL.revokeObjectURL(preview)
     setPreview('')
     if (fileRef.current) fileRef.current.value = ''
@@ -173,6 +210,7 @@ export default function ScheduleForm({ onSubmit }) {
         </div>
       )}
       {status && <p className="status">{status}</p>}
+      {identitySource && <p className="status">{identitySource}</p>}
       {error && <p className="error">{error}</p>}
 
       {rawText && (

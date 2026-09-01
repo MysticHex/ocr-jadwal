@@ -67,10 +67,11 @@ src/
     PeopleTable.jsx        tabel nama + kartu detail hover
     WeekCalendar.jsx       heatmap mingguan + panel insight
   lib/
-    ocr.js                 worker tesseract.js (recognizeGrid / recognizeText)
+    ocr.js                 worker tesseract.js, dua pass + pilih confidence tertinggi
     parseSchedule.js       parser teks OCR → daftar mata kuliah + kolom hari dari bbox
+    parseIdentity.js       nama/NIM/kelas dari panel gambar, nama/divisi dari nama file
     weekLoad.js            agregasi jadwal semua anggota → grid mingguan + insight
-    image.js               upscale sebelum OCR + thumbnail dataURL
+    image.js               upscale + binarisasi Otsu, thumbnail dataURL
 ```
 
 ## Cara parser bekerja
@@ -98,6 +99,20 @@ Sebelum OCR, gambar otomatis di-upscale ke ~3840px (`upscaleForOcr` di `lib/imag
 Teks sel jadwal SIRAMA hanya ~9px pada screenshot 1920px; upscale menaikkan confidence
 Tesseract dari ~79 ke ~91 dan memperbaiki jam yang terbaca `1030- 11:30`.
 
+Gambar dibaca **dua kali** lalu diambil yang confidence-nya lebih tinggi
+(`recognizeBestGrid` di `lib/ocr.js`): sekali dengan warna asli, sekali setelah
+grayscale + binarisasi Otsu. Tidak ada satu preprocessing yang menang untuk semua bentuk
+screenshot:
+
+| Bentuk gambar | Warna asli | Binarisasi Otsu |
+| --- | --- | --- |
+| crop tabel, sel hijau | conf 69, **0 mata kuliah** | conf 92, 7 mata kuliah |
+| jendela browser penuh | conf 83, 7 mata kuliah | conf 63, hasil kacau |
+
+Chrome dan sidebar yang gelap menarik ambang global ke bawah, jadi binarisasi justru merusak
+screenshot jendela penuh. Diukur pada lima gambar, confidence Tesseract memilih pemenang yang
+benar di kelimanya. Konsekuensinya OCR jadi ~2x lebih lama.
+
 ## Cara kolom hari ditentukan
 
 Jadwal SIRAMA adalah grid: hari adalah **kolom**, bukan penanda baris. Parsing baris-per-baris
@@ -119,6 +134,33 @@ dikosongkan untuk diisi manual.
 
 Kalau hasilnya kosong, buka panel **Teks mentah OCR** di bawah tombol untuk melihat apa yang
 sebenarnya dibaca Tesseract.
+
+## Isi otomatis identitas
+
+Setelah OCR, kolom Nama/Kelas/Divisi yang **masih kosong** diisi sendiri (`lib/parseIdentity.js`);
+ketikan yang sudah ada tidak pernah ditimpa, dan sumbernya ditulis di bawah tombol.
+
+- **Nama, Kelas, NIM** dari panel *Data Mahasiswa* yang muncul di tampilan mobile SIRAMA
+- **Nama, Divisi** dari nama file berpola `JADWAL KULIAH_ALIF RND.png` (token terakhir = divisi)
+
+Nama file yang tidak berpola (`Screenshot 2026-09-01 141258.png`, `IMG_1234.jpg`) sengaja
+tidak ditebak sama sekali.
+
+## Bentuk screenshot yang sudah diuji
+
+Diverifikasi lewat UI, bukan cuma unit test:
+
+| Bentuk | Hasil |
+| --- | --- |
+| crop tabel desktop (1652×932, 1521×841, 1498×814) | kode, hari, dan jam benar |
+| jendela browser penuh + sidebar (1920×1080) | kode, hari, dan jam benar |
+| screenshot HP portrait (1260×2800) | kode, hari, dan jam benar; sebagian nama mata kuliah tidak lengkap karena teksnya ~9px |
+
+Nama mata kuliah yang pecah beberapa baris di sel sempit digabung lagi berdasarkan tinggi
+kata — nama Inggris dirender lebih kecil, dan potongannya diambil pada penurunan tinggi
+terbesar, bukan ambang tetap. Kode yang salah baca di satu sesi (`BZK4AAC4` jadi `BZK4AACA`,
+atau tersisip jadi `BBKA4GBB3`) digabung kembali kalau jarak editnya 1 dan hari serta namanya
+sama; kode yang dipakai diambil dari sesi terbanyak.
 
 ## Test
 

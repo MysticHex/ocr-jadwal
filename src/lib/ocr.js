@@ -1,4 +1,5 @@
 import { createWorker, PSM } from 'tesseract.js'
+import { binarizeForOcr, upscaleForOcr } from './image.js'
 
 let workerPromise = null
 
@@ -32,7 +33,7 @@ async function run(image, onProgress, psm) {
   const worker = await getWorker(onProgress)
   await worker.setParameters({ tessedit_pageseg_mode: psm })
   const { data } = await worker.recognize(image)
-  return { text: data.text, words: flattenWords(data) }
+  return { text: data.text, words: flattenWords(data), confidence: data.confidence }
 }
 
 /**
@@ -55,6 +56,34 @@ export function recognizeGrid(image, onProgress) {
  */
 export function recognizeText(image, onProgress) {
   return run(image, onProgress, PSM.AUTO)
+}
+
+/**
+ * Baca gambar dua kali — warna asli dan versi binarisasi Otsu — lalu ambil yang
+ * confidence-nya lebih tinggi.
+ *
+ * Tidak ada satu preprocessing yang menang untuk semua bentuk screenshot.
+ * Crop tabel dengan sel berwarna butuh binarisasi (satu gambar uji: 0 -> 7 mata
+ * kuliah), sedangkan screenshot jendela browser penuh justru rusak karenanya
+ * (7 -> hasil kacau). Diukur pada lima gambar, confidence Tesseract memilih
+ * pemenang yang benar di kelimanya, jadi itu yang dipakai sebagai juri.
+ *
+ * @param {File|Blob} file gambar asli, belum diskalakan
+ * @param {(m:{status:string,progress:number}) => void} [onProgress]
+ */
+export async function recognizeBestGrid(file, onProgress) {
+  const passes = []
+  for (const [label, prepare] of [
+    ['warna asli', upscaleForOcr],
+    ['kontras tinggi', binarizeForOcr],
+  ]) {
+    const image = await prepare(file)
+    const result = await recognizeGrid(image, (m) =>
+      onProgress?.({ ...m, status: `${m.status} (${label})` }),
+    )
+    passes.push(result)
+  }
+  return passes.reduce((best, pass) => (pass.confidence > best.confidence ? pass : best))
 }
 
 export async function terminateOcr() {
