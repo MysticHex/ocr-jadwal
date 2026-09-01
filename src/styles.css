@@ -154,3 +154,16 @@ footer { color: var(--muted); font-size: 12px; text-align: center; }
   .grid-3 { grid-template-columns: 1fr; }
   .detail-card { position: static; width: auto; box-shadow: none; margin-top: 8px; }
 }
+
+.raw { border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; }
+.raw summary { cursor: pointer; color: var(--muted); font-size: 13px; }
+.raw pre {
+  max-height: 240px;
+  overflow: auto;
+  margin: 8px 0 0;
+  font-size: 12px;
+  white-space: pre-wrap;
+  color: var(--muted);
+}
+
+button.small { padding: 6px 12px; font-size: 13px; margin-top: 10px; }

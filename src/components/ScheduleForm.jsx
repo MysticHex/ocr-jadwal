@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import { recognize } from '../lib/ocr.js'
-import { parseSchedule } from '../lib/parseSchedule.js'
-import { makeThumbnail } from '../lib/image.js'
+import { parseOcrResult } from '../lib/parseSchedule.js'
+import { makeThumbnail, preprocessForOcr } from '../lib/image.js'
 
 const EMPTY = { nama: '', kelas: '', divisi: '' }
 
@@ -34,18 +34,22 @@ export default function ScheduleForm({ onSubmit }) {
     }
     setBusy(true)
     setError('')
-    setStatus('memuat model OCR...')
+    setStatus('menyiapkan gambar...')
     try {
-      const text = await recognize(file, (m) => {
+      const prepared = await preprocessForOcr(file)
+      const { text, words } = await recognize(prepared, (m) => {
         setStatus(m.status)
         setProgress(m.progress || 0)
       })
       setRawText(text)
-      const parsed = parseSchedule(text)
+      const parsed = parseOcrResult({ text, words })
       setCourses(parsed)
       setStatus(parsed.length ? `${parsed.length} mata kuliah terbaca` : 'tidak ada mata kuliah terbaca')
       if (!parsed.length) {
-        setError('OCR selesai tapi tidak menemukan pola jadwal. Coba gambar beresolusi lebih tinggi.')
+        setError(
+          'OCR selesai tapi tidak menemukan pola jadwal. Cek "Teks mentah OCR" di bawah, ' +
+            'crop gambar hanya ke bagian tabel, atau tambah baris manual.'
+        )
       }
     } catch (e) {
       setError(`OCR gagal: ${e.message}`)
@@ -59,6 +63,13 @@ export default function ScheduleForm({ onSubmit }) {
     setCourses((prev) => prev.map((c, i) => (i === index ? { ...c, [field]: value } : c)))
   }
 
+  function addCourse() {
+    setCourses((prev) => [
+      ...prev,
+      { code: '', name: '', nameEn: '', day: '', start: '', end: '', sessions: 1 },
+    ])
+  }
+
   function removeCourse(index) {
     setCourses((prev) => prev.filter((_, i) => i !== index))
   }
@@ -70,7 +81,7 @@ export default function ScheduleForm({ onSubmit }) {
       return
     }
     if (!courses.length) {
-      setError('Belum ada mata kuliah. Jalankan OCR dulu.')
+      setError('Belum ada mata kuliah. Jalankan OCR atau tambah baris manual.')
       return
     }
     const thumb = file ? await makeThumbnail(file) : ''
@@ -165,7 +176,14 @@ export default function ScheduleForm({ onSubmit }) {
       {status && <p className="status">{status}</p>}
       {error && <p className="error">{error}</p>}
 
-      {courses.length > 0 && (
+      {rawText && (
+        <details className="raw">
+          <summary>Teks mentah OCR</summary>
+          <pre>{rawText}</pre>
+        </details>
+      )}
+
+      {(courses.length > 0 || rawText) && (
         <div className="parsed">
           <h3>Hasil baca ({courses.length}) — bisa dikoreksi</h3>
           <table className="mini">
@@ -196,6 +214,9 @@ export default function ScheduleForm({ onSubmit }) {
               ))}
             </tbody>
           </table>
+          <button type="button" className="secondary small" onClick={addCourse}>
+            + Tambah baris manual
+          </button>
         </div>
       )}
     </form>
