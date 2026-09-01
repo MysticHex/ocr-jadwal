@@ -148,9 +148,64 @@ th { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: v
 .detail-table tbody tr:nth-child(odd) { background: var(--green); }
 .detail-table em { display: block; color: var(--muted); font-size: 11px; font-style: italic; }
 
+.raw summary { color: var(--muted); font-size: 13px; cursor: pointer; }
+.raw textarea {
+  width: 100%;
+  margin-top: 8px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  white-space: pre;
+}
+
+.tabs { display: flex; gap: 8px; }
+.tab {
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  padding: 8px 14px;
+  border-radius: 999px;
+  font-size: 14px;
+  cursor: pointer;
+}
+.tab.active { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 600; }
+
+.cal { width: 100%; border-collapse: collapse; font-size: 13px; }
+.cal th, .cal td { border: 1px solid var(--line); padding: 6px 8px; text-align: center; }
+.cal thead th { font-size: 12px; letter-spacing: .02em; }
+.cal thead th em { display: block; color: var(--muted); font-size: 11px; font-weight: 400; font-style: normal; }
+.cal-time { color: var(--muted); font-weight: 400; white-space: nowrap; }
+.cal thead th.cal-off { color: var(--muted); font-weight: 400; }
+.cal-cell { cursor: pointer; min-width: 74px; font-weight: 600; }
+.cal-cell.free { color: var(--muted); }
+.cal-cell:hover { outline: 2px solid var(--accent); outline-offset: -2px; }
+.cal-cell.picked { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+.cal-note { margin: 12px 0 0; }
+
+.slot-detail { margin-top: 16px; border-top: 1px solid var(--line); padding-top: 12px; }
+.slot-detail h3 { margin: 0 0 8px; }
+.slot-list { margin: 0; padding-left: 18px; font-size: 13px; }
+.slot-list li { margin-bottom: 4px; }
+.slot-list .muted { color: var(--muted); }
+
+.insight-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+.insight {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.insight.hot { border-color: var(--accent); background: var(--accent-soft); }
+.insight span { color: var(--muted); font-size: 12px; }
+.insight strong { font-size: 18px; }
+.insight em { color: var(--muted); font-size: 12px; font-style: normal; }
+
 footer { color: var(--muted); font-size: 12px; text-align: center; }
 
 @media (max-width: 700px) {
   .grid-3 { grid-template-columns: 1fr; }
   .detail-card { position: static; width: auto; box-shadow: none; margin-top: 8px; }
+  .cal-cell { min-width: 56px; }
 }

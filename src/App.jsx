@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import ScheduleForm from './components/ScheduleForm.jsx'
 import PeopleTable from './components/PeopleTable.jsx'
+import WeekCalendar from './components/WeekCalendar.jsx'
 
 const STORAGE_KEY = 'ocr-jadwal:people'
 
@@ -14,6 +15,7 @@ function loadPeople() {
 
 export default function App() {
   const [people, setPeople] = useState(loadPeople)
+  const [page, setPage] = useState('data')
 
   useEffect(() => {
     try {
@@ -37,25 +39,48 @@ export default function App() {
     <div className="app">
       <header>
         <h1>OCR Jadwal Kuliah</h1>
-        <p>Upload screenshot jadwal, isi identitas, dapatkan tabel dengan detail kelas saat hover.</p>
+        <p>Upload screenshot jadwal, isi identitas, lalu lihat kapan semua anggota sibuk.</p>
       </header>
 
-      <ScheduleForm onSubmit={(person) => setPeople((prev) => [...prev, person])} />
+      <nav className="tabs">
+        <button
+          type="button"
+          className={page === 'data' ? 'tab active' : 'tab'}
+          onClick={() => setPage('data')}
+        >
+          Input &amp; Daftar
+        </button>
+        <button
+          type="button"
+          className={page === 'kalender' ? 'tab active' : 'tab'}
+          onClick={() => setPage('kalender')}
+        >
+          Kalender Mingguan
+        </button>
+      </nav>
 
-      <PeopleTable
-        people={people}
-        onRemove={(id) => setPeople((prev) => prev.filter((p) => p.id !== id))}
-      />
+      {page === 'data' ? (
+        <>
+          <ScheduleForm onSubmit={(person) => setPeople((prev) => [...prev, person])} />
 
-      {people.length > 0 && (
-        <div className="row end">
-          <button type="button" className="secondary" onClick={exportJson}>
-            Export JSON
-          </button>
-          <button type="button" className="link danger" onClick={() => setPeople([])}>
-            Hapus semua
-          </button>
-        </div>
+          <PeopleTable
+            people={people}
+            onRemove={(id) => setPeople((prev) => prev.filter((p) => p.id !== id))}
+          />
+
+          {people.length > 0 && (
+            <div className="row end">
+              <button type="button" className="secondary" onClick={exportJson}>
+                Export JSON
+              </button>
+              <button type="button" className="link danger" onClick={() => setPeople([])}>
+                Hapus semua
+              </button>
+            </div>
+          )}
+        </>
+      ) : (
+        <WeekCalendar people={people} />
       )}
 
       <footer>OCR jalan penuh di browser (tesseract.js). Data tersimpan lokal di perangkat.</footer>

@@ -3,3 +3,10 @@ dist
 .vercel
 *.local
 .DS_Store
+.playwright-mcp
+
+# screenshot jadwal berisi data pribadi (nama, NIM, foto)
+*.png
+*.jpg
+*.jpeg
+!public/**

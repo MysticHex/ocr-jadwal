@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
-import { recognize } from '../lib/ocr.js'
-import { parseSchedule } from '../lib/parseSchedule.js'
-import { makeThumbnail } from '../lib/image.js'
+import { recognizeGrid, recognizeText } from '../lib/ocr.js'
+import { parseSchedule, parseScheduleColumns } from '../lib/parseSchedule.js'
+import { makeThumbnail, upscaleForOcr } from '../lib/image.js'
 
 const EMPTY = { nama: '', kelas: '', divisi: '' }
 
@@ -36,19 +36,29 @@ export default function ScheduleForm({ onSubmit }) {
     setError('')
     setStatus('memuat model OCR...')
     try {
-      const text = await recognize(file, (m) => {
+      const onLog = (m) => {
         setStatus(m.status)
         setProgress(m.progress || 0)
-      })
+      }
+      const image = await upscaleForOcr(file)
+      const grid = await recognizeGrid(image, onLog)
+      let text = grid.text
+      let parsed = parseScheduleColumns(grid.words)
+      if (!parsed.length) {
+        // Tidak ada baris header hari (gambar sudah di-crop): baca ulang dengan
+        // deteksi tata letak otomatis, kolom hari diisi manual.
+        const auto = await recognizeText(image, onLog)
+        text = auto.text
+        parsed = parseSchedule(auto.text)
+      }
       setRawText(text)
-      const parsed = parseSchedule(text)
       setCourses(parsed)
       setStatus(parsed.length ? `${parsed.length} mata kuliah terbaca` : 'tidak ada mata kuliah terbaca')
       if (!parsed.length) {
         setError('OCR selesai tapi tidak menemukan pola jadwal. Coba gambar beresolusi lebih tinggi.')
       }
     } catch (e) {
-      setError(`OCR gagal: ${e.message}`)
+      setError(`OCR gagal: ${e?.message || e || 'penyebab tidak diketahui, lihat console'}`)
     } finally {
       setBusy(false)
       setProgress(0)
@@ -127,7 +137,7 @@ export default function ScheduleForm({ onSubmit }) {
           <input
             value={form.nama}
             onChange={(e) => setForm({ ...form, nama: e.target.value })}
-            placeholder="Andikanajmi Levi Maheswara"
+            placeholder="Kylian Mbappe"
           />
         </label>
         <label>
@@ -135,7 +145,7 @@ export default function ScheduleForm({ onSubmit }) {
           <input
             value={form.kelas}
             onChange={(e) => setForm({ ...form, kelas: e.target.value })}
-            placeholder="IF-47-01"
+            placeholder="SI-48-INT"
           />
         </label>
         <label>
@@ -143,7 +153,7 @@ export default function ScheduleForm({ onSubmit }) {
           <input
             value={form.divisi}
             onChange={(e) => setForm({ ...form, divisi: e.target.value })}
-            placeholder="Data Science"
+            placeholder="Acara"
           />
         </label>
       </div>
@@ -164,6 +174,13 @@ export default function ScheduleForm({ onSubmit }) {
       )}
       {status && <p className="status">{status}</p>}
       {error && <p className="error">{error}</p>}
+
+      {rawText && (
+        <details className="raw">
+          <summary>Teks mentah OCR ({rawText.length} karakter)</summary>
+          <textarea readOnly rows={12} value={rawText} />
+        </details>
+      )}
 
       {courses.length > 0 && (
         <div className="parsed">
